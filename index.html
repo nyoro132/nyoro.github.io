@@ -1,0 +1,1398 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>レスキューライン 採点システム（電通高版）</title>
+    <!-- html2pdfライブラリを使用（日本語対応） -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding-top: 140px;
+            /* 固定ヘッダーの高さ分だけ余白を追加 */
+        }
+
+        h1,
+        h2 {
+            text-align: center;
+        }
+
+        .input-group {
+            margin: 1em 0;
+            text-align: center;
+        }
+
+        label {
+            font-weight: bold;
+        }
+
+        input[type="number"] {
+            width: 80px;
+            padding: 0.3em;
+            font-size: 1em;
+        }
+
+        input[type="text"] {
+            padding: 0.3em;
+            font-size: 1em;
+        }
+
+        button {
+            font-size: 1em;
+            padding: 0.5em 1em;
+            margin: 0.5em;
+        }
+
+        .segment,
+        .obstacle,
+        .rescue {
+            border: 1px solid #ccc;
+            padding: 1em;
+            margin-bottom: 1em;
+            border-radius: 4px;
+        }
+
+        .obstacle-container,
+        .rescue-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .obstacle-item,
+        .rescue-item {
+            border: 1px solid #aaa;
+            border-radius: 4px;
+            padding: 0.5em;
+            margin: 0.5em;
+            min-width: 150px;
+            text-align: center;
+        }
+
+        #result {
+            border-top: 2px solid #333;
+            margin-top: 1em;
+            padding-top: 1em;
+        }
+
+        #timer {
+            font-size: 1.5em;
+            text-align: center;
+            margin-bottom: 1em;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background-color: #f8f9fa;
+            border-bottom: 2px solid #333;
+            padding: 10px;
+            z-index: 1000;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .timer-buttons {
+            text-align: center;
+            margin-bottom: 1em;
+            position: fixed;
+            top: 60px;
+            left: 0;
+            right: 0;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #ddd;
+            padding: 10px;
+            z-index: 999;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        /* メインコンテンツを固定ヘッダーの下に移動 */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding-top: 140px;
+            /* 固定ヘッダーの高さ分だけ余白を追加 */
+        }
+
+        .time-up-flash {
+            animation: flashRed 1s infinite;
+        }
+
+        .time-up-flash #timer {
+            background-color: #ff4444 !important;
+            color: white !important;
+            animation: flashRedTimer 1s infinite;
+        }
+
+        @keyframes flashRed {
+            0% {
+                border-color: red;
+            }
+
+            50% {
+                border-color: transparent;
+            }
+
+            100% {
+                border-color: red;
+            }
+        }
+
+        @keyframes flashRedTimer {
+            0% {
+                background-color: #ff4444;
+            }
+
+            50% {
+                background-color: #ff0000;
+            }
+
+            100% {
+                background-color: #ff4444;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <h1>レスキューライン 採点システム</h1>
+
+    <!-- タイマー表示 -->
+    <div id="timer">残り時間: 08:00</div>
+
+    <!-- タイマー制御ボタン -->
+    <div class="timer-buttons">
+        <button id="startTimer">タイマースタート</button>
+        <button id="stopTimer">タイマーストップ</button>
+        <button id="resetTimer">タイマーリセット</button>
+    </div>
+
+    <!-- チェックポイント数設定 -->
+    <div class="input-group">
+        <label for="teamName">チーム名:</label>
+        <input type="text" id="teamName" placeholder="チーム名を入力" style="width: 200px; margin-right: 2em;">
+        <label for="numCheckpoints">チェックポイント数:</label>
+        <input type="number" id="numCheckpoints" min="0" value="0">
+        <button id="setCheckpoints">設定</button>
+    </div>
+
+    <!-- スタート点獲得ボタン -->
+    <div class="input-group" style="text-align: center; margin: 1.5em 0;">
+        <button id="addStartButton"
+            style="font-size: 1.3em; padding: 0.8em 2em; background-color: #2196F3; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold;">スタート点獲得</button>
+    </div>
+
+    <!-- セグメント入力欄 -->
+    <div id="segments"></div>
+
+    <!-- 障害物カウント入力欄 -->
+    <h2>障害物カウント</h2>
+    <div id="obstacles" class="obstacle">
+        <div class="obstacle-container">
+            <div class="obstacle-item">
+                <div>ギャップ (10点)</div>
+                <button class="obsMinus" data-type="gap">−</button>
+                <span id="gapCount">0</span>
+                <button class="obsPlus" data-type="gap">＋</button>
+            </div>
+            <div class="obstacle-item">
+                <div>スピードバンプ (10点)</div>
+                <button class="obsMinus" data-type="bump">−</button>
+                <span id="bumpCount">0</span>
+                <button class="obsPlus" data-type="bump">＋</button>
+            </div>
+            <div class="obstacle-item">
+                <div>交差点 (10点)</div>
+                <button class="obsMinus" data-type="intersection">−</button>
+                <span id="intersectionCount">0</span>
+                <button class="obsPlus" data-type="intersection">＋</button>
+            </div>
+            <div class="obstacle-item">
+                <div>行き止まり (10点)</div>
+                <button class="obsMinus" data-type="deadend">−</button>
+                <span id="deadendCount">0</span>
+                <button class="obsPlus" data-type="deadend">＋</button>
+            </div>
+            <div class="obstacle-item">
+                <div>傾斜路 (10点)</div>
+                <button class="obsMinus" data-type="ramp">−</button>
+                <span id="rampCount">0</span>
+                <button class="obsPlus" data-type="ramp">＋</button>
+            </div>
+            <div class="obstacle-item">
+                <div>障害物 (20点)</div>
+                <button class="obsMinus" data-type="obstacle">−</button>
+                <span id="obstacleCount">0</span>
+                <button class="obsPlus" data-type="obstacle">＋</button>
+            </div>
+            <div class="obstacle-item">
+                <div>シーソー (20点)</div>
+                <button class="obsMinus" data-type="seesaw">−</button>
+                <span id="seesawCount">0</span>
+                <button class="obsPlus" data-type="seesaw">＋</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 被災者救助入力欄 -->
+    <h2>被災者救助</h2>
+    <div id="rescueSection" class="rescue">
+        <div class="rescue-container">
+            <div class="rescue-item">
+                <div>生きている被災者救助成功<br>※最大2体まで (×1.4)</div>
+                <button class="rescueMinus" data-type="alive">−</button>
+                <span id="aliveRescueCount">0</span>
+                <button class="rescuePlus" data-type="alive">＋</button>
+            </div>
+            <div class="rescue-item">
+                <div>死亡した被災者救助成功<br>※最大1体まで・生きている被災者2体救助後のみ有効 (×1.4)</div>
+                <button class="rescueMinus" data-type="dead">−</button>
+                <span id="deadRescueCount">0</span>
+                <button class="rescuePlus" data-type="dead">＋</button>
+            </div>
+            <div class="rescue-item">
+                <div>救助ゾーン進行停止回数 (-0.05/回)</div>
+                <button class="rescueMinus" data-type="stop">−</button>
+                <span id="rescueStopCount">0</span>
+                <button class="rescuePlus" data-type="stop">＋</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 救助成功ボタン（救助できた場合のみ押す） -->
+    <div class="input-group" style="text-align: center;">
+        <button id="addRescueButton">救助できた</button>
+    </div>
+
+    <!-- 採点・プラスゴール点獲得・リセットボタン -->
+    <div class="input-group" style="text-align: center;">
+        <button id="calcScore">採点</button>
+        <button id="plusGoalButton">プラスゴール点獲得</button>
+        <button id="downloadScore" disabled>結果をダウンロード（TXT）</button>
+        <button id="downloadPDF" disabled>結果をダウンロード（PDF）</button>
+        <button id="resetPartial">部分リセット</button>
+        <button id="resetAll">完全リセット</button>
+    </div>
+
+    <!-- 結果表示 -->
+    <div id="result"></div>
+
+    <script>
+        // ========================================
+        // タイマー関連の処理
+        // ========================================
+
+        // 競技時間の設定（秒単位）
+        // let totalTime = 10; // デバッグ・テスト用（10秒）
+        let totalTime = 480; // 本番用：8分＝480秒
+
+        // タイマーのインターバルIDを保存する変数（null = 停止中）
+        let timerInterval = null;
+        // タイマーの表示を更新する関数
+        // 秒数を「分:秒」の形式で画面に表示
+        function updateTimerDisplay() {
+            let minutes = Math.floor(totalTime / 60); // 分を計算
+            let seconds = totalTime % 60; // 残りの秒数を計算
+
+            // 1桁の場合は0を前に付ける（例：1 → 01）
+            minutes = minutes < 10 ? "0" + minutes : minutes;
+            seconds = seconds < 10 ? "0" + seconds : seconds;
+
+            // 画面のタイマー表示を更新
+            document.getElementById('timer').textContent = "残り時間: " + minutes + ":" + seconds;
+        }
+        // タッチデバイス対応：スタートボタンのタッチイベント
+        document.getElementById('startTimer').addEventListener('touchstart', function (e) {
+            e.preventDefault(); // デフォルトのタッチ動作を無効化
+            startTimer();
+        });
+
+        // マウス・キーボード対応：スタートボタンのクリックイベント
+        document.getElementById('startTimer').addEventListener('click', startTimer);
+
+        // タイマーを開始する関数
+        function startTimer() {
+            // 既にタイマーが動いていない場合のみ開始
+            if (timerInterval === null) {
+                // 1秒ごとに実行される処理を設定
+                timerInterval = setInterval(function () {
+                    if (totalTime <= 0) {
+                        // 時間切れの処理
+                        clearInterval(timerInterval); // タイマー停止
+                        timerInterval = null;
+                        document.getElementById('timer').textContent = "時間切れ";
+                        disableInputs(); // 入力制限（実際は制限しない仕様）
+                    } else {
+                        // 1秒減らして表示更新
+                        totalTime--;
+                        updateTimerDisplay();
+                    }
+                }, 1000); // 1000ms = 1秒間隔
+            }
+        }
+        // タッチデバイス対応：ストップボタンのタッチイベント
+        document.getElementById('stopTimer').addEventListener('touchstart', function (e) {
+            e.preventDefault();
+            stopTimer();
+        });
+
+        // マウス・キーボード対応：ストップボタンのクリックイベント
+        document.getElementById('stopTimer').addEventListener('click', stopTimer);
+
+        // タイマーを一時停止する関数
+        function stopTimer() {
+            if (timerInterval !== null) {
+                clearInterval(timerInterval); // インターバル処理を停止
+                timerInterval = null; // 停止状態にセット
+            }
+        }
+        // タッチデバイス対応：リセットボタンのタッチイベント
+        document.getElementById('resetTimer').addEventListener('touchstart', function (e) {
+            e.preventDefault();
+            resetTimer();
+        });
+
+        // マウス・キーボード対応：リセットボタンのクリックイベント
+        document.getElementById('resetTimer').addEventListener('click', resetTimer);
+
+        // タイマーをリセットする関数（競技開始前の状態に戻す）
+        function resetTimer() {
+            stopTimer(); // タイマーを停止
+            totalTime = 480; // 8分＝480秒に戻す
+            updateTimerDisplay(); // 表示を更新
+            enableInputs(); // 入力を有効化（点滅も解除）
+        }
+        // 時間切れ時の処理（現在の仕様では入力制限はしない）
+        function disableInputs() {
+            // タイマーが切れても操作は継続可能にする仕様
+            // 時間切れ時にbodyに点滅クラスを追加して視覚的に警告
+            document.body.classList.add('time-up-flash');
+        }
+
+        // 入力を有効化し、時間切れの点滅を解除する関数
+        function enableInputs() {
+            let inputs = document.querySelectorAll('input, select, button');
+            inputs.forEach(el => { el.disabled = false; }); // 全ての入力要素を有効化
+
+            // タイマーボタンも有効化
+            document.getElementById('startTimer').disabled = false;
+            document.getElementById('stopTimer').disabled = false;
+            document.getElementById('resetTimer').disabled = false;
+
+            // タイマーリセット時に点滅クラスを削除
+            document.body.classList.remove('time-up-flash');
+        }
+        // ページ読み込み時にタイマー表示を初期化
+        updateTimerDisplay();
+
+        // ========================================
+        // 採点システム - 基本変数の定義
+        // ========================================
+
+        // セグメント（チェックポイント間）のデータを保存する配列
+        let segmentsData = [];
+
+        // チェックポイントの数（ユーザーが設定）
+        let numCheckpoints = 0;
+
+        // 障害物の種類を定義（システムで使用する内部名）
+        const obstacleTypes = ["gap", "bump", "intersection", "deadend", "ramp", "obstacle", "seesaw"];
+
+        // 各障害物の得点を定義（ここを変更すると点数が変わる）
+        const obstaclePoints = {
+            gap: 10,          // ギャップ
+            bump: 10,         // スピードバンプ
+            intersection: 10, // 交差点
+            deadend: 10,      // 行き止まり
+            ramp: 10,         // 傾斜路
+            obstacle: 20,     // 障害物
+            seesaw: 20        // シーソー
+        };
+
+        // 各障害物のカウント数を保存するオブジェクト
+        let obstacleCounts = {};
+
+        // 障害物カウントを0で初期化
+        obstacleTypes.forEach(type => { obstacleCounts[type] = 0; });
+
+        // ========================================
+        // スタート点の管理
+        // ========================================
+
+        // スタート点の得点（0または5点）
+        let startPoint = 0;
+
+        // スタート点獲得状態を管理するフラグ（true=獲得済み, false=未獲得）
+        let startPointAcquired = false;
+
+        // ========================================
+        // 被災者救助関連の変数
+        // ========================================
+
+        // 生きている被災者の救助成功回数（最大2体）
+        let aliveRescueCount = 0;
+
+        // 死亡した被災者の救助成功回数（最大1体、生きている被災者2体救助後のみ有効）
+        let deadRescueCount = 0;
+
+        // 救助ゾーンでの進行停止回数（マイナス要素）
+        let rescueStopCount = 0;
+
+        // 「救助できた」ボタンが押されたかどうかのフラグ
+        let rescueApplied = false;
+        // 被災者救助の表示を更新する関数
+        function updateRescueDisplay() {
+            // 各カウントを画面に表示
+            document.getElementById('aliveRescueCount').textContent = aliveRescueCount;
+            document.getElementById('deadRescueCount').textContent = deadRescueCount;
+            document.getElementById('rescueStopCount').textContent = rescueStopCount;
+        }
+
+        // ページ読み込み時に被災者救助の表示を初期化
+        updateRescueDisplay();
+
+        // ========================================
+        // ローカルストレージからのデータ復元
+        // ページをリロードしても入力内容を保持する仕組み
+        // ========================================
+
+        // チェックポイント数の復元
+        if (localStorage.getItem('numCheckpoints')) {
+            numCheckpoints = parseInt(localStorage.getItem('numCheckpoints'), 10);
+            document.getElementById('numCheckpoints').value = numCheckpoints;
+        }
+
+        // セグメントデータの復元
+        if (localStorage.getItem('segmentsData')) {
+            try {
+                segmentsData = JSON.parse(localStorage.getItem('segmentsData'));
+            }
+            catch (e) {
+                segmentsData = []; // エラー時は空配列で初期化
+            }
+        }
+
+        // 障害物カウントの復元
+        if (localStorage.getItem('obstacleCounts')) {
+            try {
+                obstacleCounts = JSON.parse(localStorage.getItem('obstacleCounts'));
+            }
+            catch (e) {
+                // エラー時は何もしない（既に初期化済み）
+            }
+
+            // 画面表示を復元されたデータで更新
+            obstacleTypes.forEach(type => {
+                document.getElementById(type + "Count").textContent = obstacleCounts[type] || 0;
+            });
+        }
+
+        // ========================================
+        // セグメント生成機能
+        // チェックポイント数に応じて入力欄を動的に生成
+        // ========================================
+
+        function generateSegments(num, data) {
+            const segmentsDiv = document.getElementById('segments');
+            segmentsDiv.innerHTML = ''; // 既存の内容をクリア
+
+            // セグメント数 = チェックポイント数 + 1（ゴールまでの区間も含むため）
+            const segCount = num + 1;
+            segmentsData = []; // データ配列を初期化
+
+            // 各セグメントの入力欄を生成
+            for (let i = 0; i < segCount; i++) {
+                // セグメントのラベルテキストを決定
+                let labelText = '';
+                if (i === 0) {
+                    labelText = "【一】までのマス数:";
+                } else if (i < num) {
+                    const kanjiNumbers = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十"];
+                    labelText = "【" + (kanjiNumbers[i] || i) + "】までのマス数:";
+                } else {
+                    labelText = "ゴールまでのマス数:";
+                }
+
+                // 保存されたデータがあれば復元、なければデフォルト値を使用
+                const savedTiles = (data[i] && data[i].tiles) ? data[i].tiles : "";
+                const savedMistakes = (data[i] && typeof data[i].mistakes !== 'undefined') ? data[i].mistakes : 0;
+                const savedArrived = (data[i] && typeof data[i].arrived !== 'undefined') ? data[i].arrived : false;
+
+                // セグメントのコンテナ要素を作成
+                const segDiv = document.createElement('div');
+                segDiv.className = 'segment';
+
+                // 到着状態に応じてスタイルを設定
+                segDiv.style.border = savedArrived ? '2px solid #4CAF50' : '1px solid #ccc';
+                segDiv.style.backgroundColor = savedArrived ? '#f0f8f0' : 'white';
+
+                // ラベル要素を作成
+                const label = document.createElement('label');
+                label.textContent = labelText;
+
+                // マス数入力欄を作成
+                const inputTiles = document.createElement('input');
+                inputTiles.type = 'number';
+                inputTiles.min = '0';
+                inputTiles.value = savedTiles;
+                inputTiles.style.marginRight = '1em';
+
+                // マス数が変更されたときの処理
+                inputTiles.addEventListener('input', function () {
+                    segmentsData[i].tiles = parseInt(inputTiles.value, 10) || 0;
+                    saveSegments(); // ローカルストレージに保存
+                });
+
+                // ミス回数のラベル
+                const labelMistakes = document.createElement('span');
+                labelMistakes.textContent = " ミス回数: ";
+
+                // ミス回数の表示
+                const mistakesDisplay = document.createElement('span');
+                mistakesDisplay.id = "mistakesDisplay_" + i;
+                mistakesDisplay.textContent = savedMistakes;
+
+                // ミス回数の「＋」ボタン
+                const plusMistake = document.createElement('button');
+                plusMistake.textContent = "＋";
+
+                // タッチデバイス対応
+                plusMistake.addEventListener('touchstart', function (e) {
+                    e.preventDefault();
+                    segmentsData[i].mistakes++;
+                    mistakesDisplay.textContent = segmentsData[i].mistakes;
+                    saveSegments();
+                });
+
+                // マウス・キーボード対応
+                plusMistake.addEventListener('click', function () {
+                    segmentsData[i].mistakes++;
+                    mistakesDisplay.textContent = segmentsData[i].mistakes;
+                    saveSegments();
+                });
+
+                // ミス回数の「−」ボタン
+                const minusMistake = document.createElement('button');
+                minusMistake.textContent = "−";
+
+                // タッチデバイス対応（0以下にはならないよう制限）
+                minusMistake.addEventListener('touchstart', function (e) {
+                    e.preventDefault();
+                    if (segmentsData[i].mistakes > 0) {
+                        segmentsData[i].mistakes--;
+                        mistakesDisplay.textContent = segmentsData[i].mistakes;
+                        saveSegments();
+                    }
+                });
+
+                // マウス・キーボード対応
+                minusMistake.addEventListener('click', function () {
+                    if (segmentsData[i].mistakes > 0) {
+                        segmentsData[i].mistakes--;
+                        mistakesDisplay.textContent = segmentsData[i].mistakes;
+                        saveSegments();
+                    }
+                });
+
+                // 到着確認ボタンを作成（青色↔緑色の切り替えボタン）
+                const arrivalButton = document.createElement('button');
+                arrivalButton.id = 'arrivalButton_' + i; // 一意のIDを設定
+                arrivalButton.textContent = savedArrived ? "到着済み" : "到着";
+                arrivalButton.style.marginLeft = '1em';
+                arrivalButton.style.backgroundColor = savedArrived ? '#4CAF50' : '#2196F3';
+                arrivalButton.style.color = 'white';
+                arrivalButton.style.border = 'none';
+                arrivalButton.style.padding = '0.3em 0.8em';
+                arrivalButton.style.borderRadius = '4px';
+                arrivalButton.style.cursor = 'pointer';
+                arrivalButton.disabled = false; // 常に押せるようにする
+
+                // タッチデバイス対応
+                arrivalButton.addEventListener('touchstart', function (e) {
+                    e.preventDefault();
+                    toggleArrival(i, segDiv, arrivalButton);
+                });
+
+                // マウス・キーボード対応
+                arrivalButton.addEventListener('click', function () {
+                    toggleArrival(i, segDiv, arrivalButton);
+                });
+
+                // セグメントデータに現在の値を保存
+                segmentsData.push({
+                    tiles: parseInt(savedTiles, 10) || 0,
+                    mistakes: parseInt(savedMistakes, 10),
+                    arrived: savedArrived
+                });
+
+                // 作成した要素をセグメントコンテナに追加
+                segDiv.appendChild(label);
+                segDiv.appendChild(inputTiles);
+                segDiv.appendChild(labelMistakes);
+                segDiv.appendChild(minusMistake);
+                segDiv.appendChild(mistakesDisplay);
+                segDiv.appendChild(plusMistake);
+                segDiv.appendChild(arrivalButton);
+
+                // セグメントコンテナを画面に追加
+                segmentsDiv.appendChild(segDiv);
+            }
+
+            // 生成したセグメントデータをローカルストレージに保存
+            saveSegments();
+        }
+
+        // セグメントデータをローカルストレージに保存する関数
+        function saveSegments() {
+            localStorage.setItem('numCheckpoints', numCheckpoints);
+            localStorage.setItem('segmentsData', JSON.stringify(segmentsData));
+        }
+
+        // 到着ボタンの状態を切り替える関数（青色↔緑色のトグル）
+        function toggleArrival(index, segDiv, button) {
+            // 到着状態を反転
+            segmentsData[index].arrived = !segmentsData[index].arrived;
+
+            if (segmentsData[index].arrived) {
+                // 到着済み状態にする（緑色）
+                button.textContent = "到着済み";
+                button.style.backgroundColor = '#4CAF50';
+                button.disabled = false; // 押せるようにする
+                segDiv.style.border = '2px solid #4CAF50';
+                segDiv.style.backgroundColor = '#f0f8f0';
+            } else {
+                // 未到着状態にする（青色）
+                button.textContent = "到着";
+                button.style.backgroundColor = '#2196F3';
+                button.disabled = false;
+                segDiv.style.border = '1px solid #ccc';
+                segDiv.style.backgroundColor = 'white';
+            }
+
+            // 変更をローカルストレージに保存
+            saveSegments();
+        }
+
+        // 障害物カウントをローカルストレージに保存する関数
+        function saveObstacles() {
+            localStorage.setItem('obstacleCounts', JSON.stringify(obstacleCounts));
+        }
+
+        // ========================================
+        // チェックポイント設定ボタンのイベント処理
+        // ========================================
+
+        // タッチデバイス対応
+        document.getElementById('setCheckpoints').addEventListener('touchstart', function (e) {
+            e.preventDefault();
+            numCheckpoints = parseInt(document.getElementById('numCheckpoints').value, 10) || 0;
+            generateSegments(numCheckpoints, segmentsData);
+        });
+
+        // マウス・キーボード対応
+        document.getElementById('setCheckpoints').addEventListener('click', function () {
+            numCheckpoints = parseInt(document.getElementById('numCheckpoints').value, 10) || 0;
+            generateSegments(numCheckpoints, segmentsData);
+        });
+
+        // ページ読み込み時に保存されたチェックポイントがあれば復元
+        if (numCheckpoints > 0) {
+            generateSegments(numCheckpoints, segmentsData);
+        }
+
+        // ========================================
+        // 障害物カウンターのボタン処理
+        // ========================================
+
+        // 障害物の「＋」ボタンの処理
+        const obsButtonsPlus = document.querySelectorAll('.obsPlus');
+        const obsButtonsMinus = document.querySelectorAll('.obsMinus');
+
+        obsButtonsPlus.forEach(function (btn) {
+            // タッチデバイス対応
+            btn.addEventListener('touchstart', function (e) {
+                e.preventDefault();
+                const type = btn.getAttribute('data-type'); // 障害物の種類を取得
+                obstacleCounts[type] = (obstacleCounts[type] || 0) + 1; // カウントを1増やす
+                document.getElementById(type + "Count").textContent = obstacleCounts[type]; // 表示更新
+                saveObstacles(); // ローカルストレージに保存
+            });
+
+            // マウス・キーボード対応
+            btn.addEventListener('click', function () {
+                const type = btn.getAttribute('data-type');
+                obstacleCounts[type] = (obstacleCounts[type] || 0) + 1;
+                document.getElementById(type + "Count").textContent = obstacleCounts[type];
+                saveObstacles();
+            });
+        });
+
+        // 障害物の「−」ボタンの処理
+        obsButtonsMinus.forEach(function (btn) {
+            // タッチデバイス対応（0以下にはならないよう制限）
+            btn.addEventListener('touchstart', function (e) {
+                e.preventDefault();
+                const type = btn.getAttribute('data-type');
+                if (obstacleCounts[type] > 0) {
+                    obstacleCounts[type]--; // カウントを1減らす
+                    document.getElementById(type + "Count").textContent = obstacleCounts[type];
+                    saveObstacles();
+                }
+            });
+
+            // マウス・キーボード対応
+            btn.addEventListener('click', function () {
+                const type = btn.getAttribute('data-type');
+                if (obstacleCounts[type] > 0) {
+                    obstacleCounts[type]--;
+                    document.getElementById(type + "Count").textContent = obstacleCounts[type];
+                    saveObstacles();
+                }
+            });
+        });
+
+        // ========================================
+        // 被災者救助セクションのボタン処理
+        // ========================================
+
+        // 被災者救助の「＋」ボタンの処理
+        const rescuePlusButtons = document.querySelectorAll('.rescuePlus');
+        const rescueMinusButtons = document.querySelectorAll('.rescueMinus');
+
+        rescuePlusButtons.forEach(function (btn) {
+            // タッチデバイス対応
+            btn.addEventListener('touchstart', function (e) {
+                e.preventDefault();
+                const type = btn.getAttribute('data-type'); // 救助の種類を取得
+
+                // 種類別に上限をチェックして増加
+                if (type === "alive" && aliveRescueCount < 2) {
+                    aliveRescueCount++; // 生きている被災者（最大2体）
+                }
+                else if (type === "dead" && deadRescueCount < 1) {
+                    deadRescueCount++; // 死亡した被災者（最大1体）
+                }
+                else if (type === "stop") {
+                    rescueStopCount++; // 進行停止回数（上限なし）
+                }
+                updateRescueDisplay(); // 表示を更新
+            });
+
+            // マウス・キーボード対応
+            btn.addEventListener('click', function () {
+                const type = btn.getAttribute('data-type');
+                if (type === "alive" && aliveRescueCount < 2) { aliveRescueCount++; }
+                else if (type === "dead" && deadRescueCount < 1) { deadRescueCount++; }
+                else if (type === "stop") { rescueStopCount++; }
+                updateRescueDisplay();
+            });
+        });
+
+        // 被災者救助の「−」ボタンの処理
+        rescueMinusButtons.forEach(function (btn) {
+            // タッチデバイス対応（0以下にはならないよう制限）
+            btn.addEventListener('touchstart', function (e) {
+                e.preventDefault();
+                const type = btn.getAttribute('data-type');
+
+                // 種類別に0以下にならないようチェックして減少
+                if (type === "alive" && aliveRescueCount > 0) { aliveRescueCount--; }
+                else if (type === "dead" && deadRescueCount > 0) { deadRescueCount--; }
+                else if (type === "stop" && rescueStopCount > 0) { rescueStopCount--; }
+                updateRescueDisplay();
+            });
+
+            // マウス・キーボード対応
+            btn.addEventListener('click', function () {
+                const type = btn.getAttribute('data-type');
+                if (type === "alive" && aliveRescueCount > 0) { aliveRescueCount--; }
+                else if (type === "dead" && deadRescueCount > 0) { deadRescueCount--; }
+                else if (type === "stop" && rescueStopCount > 0) { rescueStopCount--; }
+                updateRescueDisplay();
+            });
+        });
+        // 被災者救助の表示を更新し、上限時のボタンスタイルを変更する関数
+        function updateRescueDisplay() {
+            // カウント表示を更新
+            document.getElementById('aliveRescueCount').textContent = aliveRescueCount;
+            document.getElementById('deadRescueCount').textContent = deadRescueCount;
+            document.getElementById('rescueStopCount').textContent = rescueStopCount;
+
+            // 上限に達した場合のボタンスタイル変更
+            const alivePlusButtons = document.querySelectorAll('.rescuePlus[data-type="alive"]');
+            const deadPlusButtons = document.querySelectorAll('.rescuePlus[data-type="dead"]');
+
+            // 生きている被災者のボタンスタイル制御（上限2体）
+            alivePlusButtons.forEach(btn => {
+                if (aliveRescueCount >= 2) {
+                    btn.style.backgroundColor = '#cccccc'; // グレーアウト
+                    btn.style.cursor = 'not-allowed';      // カーソルを禁止マークに
+                    btn.style.opacity = '0.5';             // 半透明に
+                } else {
+                    btn.style.backgroundColor = '';        // デフォルトに戻す
+                    btn.style.cursor = 'pointer';
+                    btn.style.opacity = '1';
+                }
+            });
+
+            // 死亡した被災者のボタンスタイル制御（上限1体）
+            deadPlusButtons.forEach(btn => {
+                if (deadRescueCount >= 1) {
+                    btn.style.backgroundColor = '#cccccc';
+                    btn.style.cursor = 'not-allowed';
+                    btn.style.opacity = '0.5';
+                } else {
+                    btn.style.backgroundColor = '';
+                    btn.style.cursor = 'pointer';
+                    btn.style.opacity = '1';
+                }
+            });
+        }
+
+        // ========================================
+        // 被災者救助乗数の計算
+        // 競技ルールに基づいた複雑な計算ロジック
+        // ========================================
+
+        // 被災者救助乗数 = ((SLVR)+(EZLP))_1 × ((SLVR)+(EZLP))_2 × ((SDVR)+(EZLP))
+        // SLVR: 生きている被災者救助成功（各成功ごとに 1.4 を掛ける）
+        // SDVR: 死亡した被災者救助成功（生きている被災者両方が既に救助されている場合のみ 1.4 を掛ける）
+        // EZLP: 各救助ゾーン停止回数1回につき -0.05 を加える
+        // 救助成功がなければ乗数は1、最低でも1.25は保証
+        // 
+        // ※ 被災者救助の倍数を変更する場合はここを修正
+        function getRescueMultiplier() {
+            // 「救助できた」ボタンが押されていない場合は乗数1
+            if (!rescueApplied) return 1;
+
+            // 救助ゾーン停止によるペナルティ計算
+            let ezlp = -0.05 * rescueStopCount;
+            let factors = []; // 乗数要素を格納する配列
+
+            // 生きている被災者の救助成功（最大2体まで）
+            for (let i = 0; i < Math.min(aliveRescueCount, 2); i++) {
+                factors.push(1.4 + ezlp); // 基本1.4にペナルティを加算
+            }
+
+            // 死亡した被災者の救助成功（生きている被災者2体の救助完了後のみ有効）
+            if (aliveRescueCount >= 2) {
+                for (let i = 0; i < deadRescueCount; i++) {
+                    factors.push(1.4 + ezlp);
+                }
+            }
+
+            // 全ての要素を掛け合わせて最終乗数を計算
+            let multiplier = factors.reduce((acc, val) => acc * val, 1);
+
+            // 最低乗数1.25を保証
+            if (multiplier < 1.25) multiplier = 1.25;
+
+            return multiplier;
+        }
+
+        // ========================================
+        // 採点結果の表示とファイル保存
+        // ========================================
+
+        // 最後の採点結果を保存する変数（ダウンロード用）
+        let lastScoreData = "";
+        let lastFinalScore = "0";
+
+        // メインの採点計算処理
+        function calculateScore() {
+            // セグメント（チェックポイント間）の得点計算
+            let totalSegmentScore = 0;
+            let segmentResultHTML = "<h2>【各チェックポイントの点数】</h2>";
+
+            // チーム名を取得（空の場合は"未入力"）
+            const teamName = document.getElementById('teamName').value.trim() || "未入力";
+            let segmentResultText = "=== レスキューライン 採点結果 ===\n";
+            segmentResultText += "チーム名: " + teamName + "\n\n【各チェックポイントの点数】\n";
+
+            // セグメント数を計算（ゴール区間を除外するかチェック）
+            const segCount = segmentsData.length;
+            let countableSegments = segCount;
+            if (numCheckpoints > 0) {
+                countableSegments = segCount - 1; // ゴール区間は別計算
+            }
+
+            // 各セグメントの得点を計算
+            for (let i = 0; i < countableSegments; i++) {
+                let pointPerTile = 0; // 1マスあたりの得点
+                let segScore = 0;     // このセグメントの総得点
+
+                // 到着していない場合は得点0
+                if (segmentsData[i].arrived) {
+                    // 進行停止回数に応じて1マスあたりの得点を決定
+                    if (segmentsData[i].mistakes === 0) pointPerTile = 5;      // ミスなし: 5点/マス
+                    else if (segmentsData[i].mistakes === 1) pointPerTile = 3; // 1回停止: 3点/マス
+                    else if (segmentsData[i].mistakes === 2) pointPerTile = 1; // 2回停止: 1点/マス
+                    else pointPerTile = 0;                                     // 3回以上停止: 0点/マス
+
+                    segScore = (segmentsData[i].tiles || 0) * pointPerTile;
+                }
+
+                totalSegmentScore += segScore;
+                // セグメント名を生成（漢数字を使用）
+                let segName = "";
+                if (i === 0) {
+                    segName = "(一)まで";
+                }
+                else {
+                    const kanjiNumbers = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十"];
+                    segName = "(" + (kanjiNumbers[i] || i) + "）まで";
+                }
+
+                // 未到着の場合の表示テキスト
+                const statusText = segmentsData[i].arrived ? "" : " (未到着)";
+
+                // HTML形式とテキスト形式で結果を記録
+                segmentResultHTML += "<p>" + segName + " : " + segScore + " 点 (マス数：" + segmentsData[i].tiles + " × " + pointPerTile + "点)" + statusText + "</p>";
+                segmentResultText += segName + " : " + segScore + " 点 (マス数：" + segmentsData[i].tiles + " × " + pointPerTile + "点)" + statusText + "\n";
+            }
+
+            // 障害物の得点計算
+            let totalObstacleScore = 0;
+            let obstacleResultHTML = "<h2>【各障害物の点数】</h2>";
+            segmentResultText += "\n【各障害物の点数】\n";
+
+            // 各種障害物の得点を計算
+            obstacleTypes.forEach(function (type) {
+                const count = obstacleCounts[type] || 0;        // カウント数
+                const pts = obstaclePoints[type];               // 1個あたりの得点
+                const score = count * pts;                      // 総得点
+                totalObstacleScore += score;
+
+                // 障害物の表示名を決定
+                let displayName = "";
+                switch (type) {
+                    case "gap": displayName = "ギャップ"; break;
+                    case "bump": displayName = "スピードバンプ"; break;
+                    case "intersection": displayName = "交差点"; break;
+                    case "deadend": displayName = "行き止まり"; break;
+                    case "ramp": displayName = "傾斜路"; break;
+                    case "obstacle": displayName = "障害物"; break;
+                    case "seesaw": displayName = "シーソー"; break;
+                    default: displayName = type;
+                }
+
+                // HTML形式とテキスト形式で結果を記録
+                obstacleResultHTML += "<p>" + displayName + " : " + score + " 点 (回数：" + (obstacleCounts[type] || 0) + " × " + pts + "点)</p>";
+                segmentResultText += displayName + " : " + score + " 点 (回数：" + (obstacleCounts[type] || 0) + " × " + pts + "点)\n";
+            });
+
+            // 進行停止の合計数を計算（ゴール点計算に使用）
+            let totalMistakes = segmentsData.reduce((sum, seg) => sum + (seg.mistakes || 0), 0);
+
+            // 基本得点 = スタート点 + セグメント合計 + 障害物合計 + ゴール点
+            let baseScore = startPoint + totalSegmentScore + totalObstacleScore + goalPoints;
+
+            // 得点内訳のHTML表示を作成
+            let breakdownHTML = "<div style='text-align: center; font-weight: bold;'>";
+            breakdownHTML += "<p>合計内訳</p>";
+            breakdownHTML += "<p>進行停止合計数 : " + totalMistakes + "回</p>";
+            breakdownHTML += "<p>ゴール点計算 : 60 - (" + totalMistakes + " × 5) = " + goalPoints + "点</p>";
+            breakdownHTML += "<p>スタート点 ＋ セグメント合計 ＋ 障害物合計 ＋ ゴール点 = 総合得点</p>";
+            breakdownHTML += "<p>　　" + startPoint + "点 ＋ " + totalSegmentScore + "点 ＋ " + totalObstacleScore + "点 ＋ " + goalPoints + "点 = " + baseScore + "点</p>";
+            breakdownHTML += "<p>被災者救助乗数 : " + getRescueMultiplier().toFixed(2) + "</p>";
+            breakdownHTML += "</div>";
+
+            // テキスト形式にも被災者救助乗数を追加
+            segmentResultText += "被災者救助乗数 : " + getRescueMultiplier().toFixed(2) + "\n";
+
+            // 最終得点 = 基本得点 × 被災者救助乗数
+            let finalScore = baseScore * getRescueMultiplier();
+            let finalScoreHTML = "<div style='text-align: center; font-size: 2em; font-weight: bold; margin-top: 10px;'>" + finalScore.toFixed(0) + "点</div>";
+
+            // 被災者救助の詳細もテキストに追加
+            if (rescueApplied) {
+                segmentResultText += "\n【被災者救助詳細】\n";
+                const appliedAlive = Math.min(aliveRescueCount, 2);
+                const appliedDead = (aliveRescueCount >= 2) ? deadRescueCount : 0;
+
+                segmentResultText += "生きている被災者救助成功 : " + aliveRescueCount + "回 (得点適用: " + appliedAlive + "回)\n";
+                segmentResultText += "死亡した被災者救助成功 : " + deadRescueCount + "回 (得点適用: " + appliedDead + "回)\n";
+                if (deadRescueCount > 0 && aliveRescueCount < 2) {
+                    segmentResultText += "※死亡した被災者は生きている被災者2体救助後のみ得点適用\n";
+                }
+                segmentResultText += "救助ゾーン進行停止回数 : " + rescueStopCount + "回\n";
+            }
+
+            // タイマーの残り時間を追加
+            let remainingMinutes = Math.floor(totalTime / 60);
+            let remainingSeconds = totalTime % 60;
+            remainingMinutes = remainingMinutes < 10 ? "0" + remainingMinutes : remainingMinutes;
+            remainingSeconds = remainingSeconds < 10 ? "0" + remainingSeconds : remainingSeconds;
+            segmentResultText += "\n【残り時間】\n" + remainingMinutes + ":" + remainingSeconds + "\n";
+
+            segmentResultText += "\n【最終得点】\n" + finalScore.toFixed(0) + "点\n";
+
+            // 合計内訳を最後に移動
+            segmentResultText += "\n【合計内訳】\n";
+            segmentResultText += "進行停止合計数 : " + totalMistakes + "回\n";
+            segmentResultText += "ゴール点計算 : 60 - (" + totalMistakes + " × 5) = " + goalPoints + "点\n";
+            segmentResultText += "スタート点 ＋ セグメント合計 ＋ 障害物合計 ＋ ゴール点 = 総合得点\n";
+            segmentResultText += "　　" + startPoint + "点 ＋ " + totalSegmentScore + "点 ＋ " + totalObstacleScore + "点 ＋ " + goalPoints + "点 = " + baseScore + "点\n";
+            segmentResultText += "被災者救助乗数 : " + getRescueMultiplier().toFixed(2) + "\n";
+
+            // 採点日時を追加
+            const now = new Date();
+            const dateStr = now.getFullYear() + "年" + (now.getMonth() + 1) + "月" + now.getDate() + "日 " +
+                now.getHours() + ":" + String(now.getMinutes()).padStart(2, '0');
+            segmentResultText += "\n採点日時 : " + dateStr + "\n";
+
+            let resultHTML = segmentResultHTML + obstacleResultHTML + breakdownHTML + finalScoreHTML;
+            document.getElementById('result').innerHTML = resultHTML;
+
+            // 採点データを保存してダウンロードボタンを有効化
+            lastScoreData = segmentResultText;
+            lastFinalScore = finalScore.toFixed(0);
+            document.getElementById('downloadScore').disabled = false;
+            document.getElementById('downloadPDF').disabled = false;
+
+            // PDFファイルとして自動保存
+            saveScoreAsPDF(segmentResultText, finalScore.toFixed(0));
+        }
+
+        function saveScoreAsText(textContent, finalScore) {
+            const now = new Date();
+            const dateStr = now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0') +
+                "_" + String(now.getHours()).padStart(2, '0') + String(now.getMinutes()).padStart(2, '0');
+
+            // チーム名を取得してファイル名に含める
+            const teamName = document.getElementById('teamName').value.trim();
+            let filename;
+            if (teamName) {
+                filename = "RCJ採点結果_" + teamName + "_" + finalScore + "点_" + dateStr + ".txt";
+            } else {
+                filename = "RCJ採点結果_" + finalScore + "点_" + dateStr + ".txt";
+            }
+
+            const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        }
+
+        // PDFダウンロード機能（html2pdf使用で日本語対応）
+        function saveScoreAsPDF(textContent, finalScore) {
+            // HTMLコンテンツを作成
+            const pdfContent = document.createElement('div');
+            pdfContent.style.fontFamily = '"游ゴシック", "Yu Gothic", "メイリオ", Meiryo, "ヒラギノ角ゴ Pro W3", "Hiragino Kaku Gothic Pro", Arial, sans-serif';
+            pdfContent.style.fontSize = '16px'; // 基本フォントサイズを大きく
+            pdfContent.style.lineHeight = '1.5'; // 行間を詰める
+            pdfContent.style.padding = '5px'; // 最小限のパディング
+            pdfContent.style.margin = '0';
+            pdfContent.style.color = 'black';
+            pdfContent.style.backgroundColor = 'white';
+            pdfContent.style.width = '100%';
+            pdfContent.style.maxWidth = '210mm'; // A4幅に制限
+            pdfContent.style.boxSizing = 'border-box';
+
+            // タイトルを追加
+            const title = document.createElement('h1');
+            title.textContent = 'レスキューライン 採点結果';
+            title.style.textAlign = 'center';
+            title.style.fontSize = '20px'; // タイトルサイズを大きく
+            title.style.margin = '0';
+            title.style.padding = '0';
+            title.style.marginBottom = '8px';
+            title.style.fontWeight = 'bold';
+            pdfContent.appendChild(title);
+
+            // テキストコンテンツを行ごとに追加
+            const lines = textContent.split('\n');
+            lines.forEach((line, index) => {
+                if (line.trim() !== '') {
+                    const p = document.createElement('p');
+                    p.textContent = line;
+                    p.style.margin = '1px 0'; // マージンを最小に
+                    p.style.padding = '0';
+                    p.style.fontSize = '14px'; // 基本文字サイズを大きく
+                    p.style.lineHeight = '1.3';
+                    p.style.wordWrap = 'break-word';
+                    p.style.overflowWrap = 'break-word';
+                    p.className = 'no-break'; // ページ分割を避ける
+
+                    // セクションヘッダーのスタイリング
+                    if (line.includes('===') || (line.includes('【') && line.includes('】'))) {
+                        p.style.fontWeight = 'bold';
+                        p.style.fontSize = '16px'; // セクションヘッダーを大きく
+                        p.style.marginTop = '5px';
+                        p.style.marginBottom = '3px';
+                        if (index > 0) p.style.borderTop = '1px solid #ddd'; // 区切り線
+                        p.style.paddingTop = '2px';
+                    }
+
+                    // 最終得点のスタイリング
+                    if (line.includes('最終得点')) {
+                        p.style.fontSize = '18px'; // 最終得点を大きく
+                        p.style.fontWeight = 'bold';
+                        p.style.textAlign = 'center';
+                        p.style.marginTop = '8px';
+                        p.style.backgroundColor = '#f0f0f0';
+                        p.style.padding = '5px';
+                        p.style.borderRadius = '3px';
+                    }
+
+                    pdfContent.appendChild(p);
+                }
+            });
+
+            // ファイル名を生成
+            const now = new Date();
+            const dateStr = now.getFullYear() + "." + (now.getMonth() + 1) + "." + now.getDate() +
+                "_" + String(now.getHours()).padStart(2, '0') + "." + String(now.getMinutes()).padStart(2, '0');
+
+            const teamName = document.getElementById('teamName').value.trim();
+            let filename;
+            if (teamName) {
+                filename = "採点表_" + finalScore + "点_" + teamName + "_" + dateStr + ".pdf";
+            } else {
+                filename = "採点表_" + finalScore + "点_未入力_" + dateStr + ".pdf";
+            }
+
+            // html2pdfの設定
+            const options = {
+                margin: [1.5, 0.5, 0.5, 0.5], // 上部マージンを増加
+                filename: filename,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: {
+                    scale: 1.2, // スケールを下げて1ページに収める
+                    useCORS: true,
+                    letterRendering: true,
+                    scrollX: 0,
+                    scrollY: 0
+                },
+                jsPDF: {
+                    unit: 'pt', // ポイント単位でより正確に
+                    format: [595.28, 841.89], // A4サイズを明示的に指定（ポイント単位）
+                    orientation: 'portrait'
+                }
+            };
+
+            // PDFを生成してダウンロード
+            // 一時的にbodyに追加して正確なレンダリングを確保
+            document.body.appendChild(pdfContent);
+
+            html2pdf().set(options).from(pdfContent).save().then(() => {
+                // PDF生成後にコンテンツを削除
+                if (pdfContent.parentNode) {
+                    pdfContent.parentNode.removeChild(pdfContent);
+                }
+            }).catch((error) => {
+                console.error('PDF生成エラー:', error);
+                if (pdfContent.parentNode) {
+                    pdfContent.parentNode.removeChild(pdfContent);
+                }
+            });
+        }
+
+        document.getElementById('calcScore').addEventListener('touchstart', function (e) {
+            e.preventDefault(); calculateScore();
+        });
+        document.getElementById('calcScore').addEventListener('click', function () {
+            calculateScore();
+        });
+
+        // ダウンロードボタンの処理
+        document.getElementById('downloadScore').addEventListener('touchstart', function (e) {
+            e.preventDefault(); downloadLastScore();
+        });
+        document.getElementById('downloadScore').addEventListener('click', function () {
+            downloadLastScore();
+        });
+        function downloadLastScore() {
+            if (lastScoreData) {
+                saveScoreAsText(lastScoreData, lastFinalScore);
+            }
+        }
+
+        // PDFダウンロードボタンの処理
+        document.getElementById('downloadPDF').addEventListener('touchstart', function (e) {
+            e.preventDefault(); downloadLastScorePDF();
+        });
+        document.getElementById('downloadPDF').addEventListener('click', function () {
+            downloadLastScorePDF();
+        });
+        function downloadLastScorePDF() {
+            if (lastScoreData) {
+                saveScoreAsPDF(lastScoreData, lastFinalScore);
+            }
+        }
+
+        // プラスゴール点獲得ボタンの処理
+        let goalPoints = 0;
+        document.getElementById('plusGoalButton').addEventListener('touchstart', function (e) {
+            e.preventDefault(); addGoalPoints();
+        });
+        document.getElementById('plusGoalButton').addEventListener('click', function () {
+            addGoalPoints();
+        });
+        function addGoalPoints() {
+            let totalMistakes = segmentsData.reduce((sum, seg) => sum + (seg.mistakes || 0), 0);
+            let calcGoal = 60 - (totalMistakes * 5);
+            if (calcGoal < 0) calcGoal = 0;
+            goalPoints = calcGoal;
+
+            // ゴール到達時にタイマーを停止
+            stopTimer();
+
+            document.getElementById('plusGoalButton').disabled = true;
+        }
+
+        // スタート点獲得ボタンの処理
+        document.getElementById('addStartButton').addEventListener('touchstart', function (e) {
+            e.preventDefault(); addStartPoint();
+        });
+        document.getElementById('addStartButton').addEventListener('click', function () {
+            addStartPoint();
+        });
+        function addStartPoint() {
+            startPointAcquired = !startPointAcquired;
+            const button = document.getElementById('addStartButton');
+
+            if (startPointAcquired) {
+                startPoint = 5;
+                button.textContent = 'スタート点獲得済み';
+                button.style.backgroundColor = '#4CAF50';
+                button.disabled = false;
+            } else {
+                startPoint = 0;
+                button.textContent = 'スタート点獲得';
+                button.style.backgroundColor = '#2196F3';
+                button.disabled = false;
+            }
+        }
+
+        // 救助成功ボタンの処理（救助できた場合に押す）
+        document.getElementById('addRescueButton').addEventListener('touchstart', function (e) {
+            e.preventDefault(); applyRescueMultiplier();
+        });
+        document.getElementById('addRescueButton').addEventListener('click', function () {
+            applyRescueMultiplier();
+        });
+        function applyRescueMultiplier() {
+            rescueApplied = true;
+            document.getElementById('addRescueButton').disabled = true;
+        }
+
+        document.getElementById('resetPartial').addEventListener('touchstart', function (e) {
+            e.preventDefault(); resetPartial();
+        });
+        document.getElementById('resetPartial').addEventListener('click', function () {
+            resetPartial();
+        });
+        function resetPartial() {
+            // チェックポイント数とマス数は保持し、ミス回数のみリセット
+            segmentsData.forEach(seg => {
+                seg.mistakes = 0;
+                seg.arrived = false; // 到着状態もリセット
+            });
+
+            // 障害物カウントをリセット
+            obstacleTypes.forEach(type => { obstacleCounts[type] = 0; });
+
+            // その他の項目をリセット
+            goalPoints = 0;
+            startPoint = 0;
+            startPointAcquired = false;
+            aliveRescueCount = 0;
+            deadRescueCount = 0;
+            rescueStopCount = 0;
+            rescueApplied = false;
+
+            // 表示をリセット
+            segmentsData.forEach((seg, i) => {
+                const mistakesDisplay = document.getElementById('mistakesDisplay_' + i);
+                if (mistakesDisplay) {
+                    mistakesDisplay.textContent = '0';
+                }
+
+                // 到着ボタンの表示もリセット
+                const arrivalButton = document.getElementById('arrivalButton_' + i);
+                if (arrivalButton) {
+                    arrivalButton.style.backgroundColor = '#2196F3';
+                    arrivalButton.style.border = 'none';
+                    arrivalButton.disabled = false;
+                    arrivalButton.textContent = '到着';
+                }
+
+                // セグメントの枠線と背景色もリセット
+                const segDiv = arrivalButton ? arrivalButton.parentElement : null;
+                if (segDiv) {
+                    segDiv.style.border = '1px solid #ccc';
+                    segDiv.style.backgroundColor = 'white';
+                }
+            });
+
+            obstacleTypes.forEach(type => {
+                document.getElementById(type + "Count").textContent = "0";
+            });
+
+            document.getElementById('result').innerHTML = "";
+            document.getElementById('plusGoalButton').disabled = false;
+            const startButton = document.getElementById('addStartButton');
+            startButton.disabled = false;
+            startButton.style.backgroundColor = '#2196F3';
+            startButton.style.color = 'white';
+            startButton.textContent = 'スタート点獲得';
+            document.getElementById('addRescueButton').disabled = false;
+            document.getElementById('downloadScore').disabled = true;
+            document.getElementById('downloadPDF').disabled = true;
+            updateRescueDisplay();
+
+            // 変更を保存
+            saveSegments();
+            saveObstacles();
+        }
+
+        document.getElementById('resetAll').addEventListener('touchstart', function (e) {
+            e.preventDefault(); resetAll();
+        });
+        document.getElementById('resetAll').addEventListener('click', function () {
+            resetAll();
+        });
+        function resetAll() {
+            localStorage.removeItem('numCheckpoints');
+            localStorage.removeItem('segmentsData');
+            localStorage.removeItem('obstacleCounts');
+            localStorage.removeItem('arrived'); // 到着状態もクリア
+            numCheckpoints = 0;
+            segmentsData = [];
+            obstacleTypes.forEach(type => { obstacleCounts[type] = 0; });
+            goalPoints = 0;
+            startPoint = 0;
+            startPointAcquired = false;
+            aliveRescueCount = 0;
+            deadRescueCount = 0;
+            rescueStopCount = 0;
+            rescueApplied = false;
+            document.getElementById('numCheckpoints').value = 0;
+            document.getElementById('segments').innerHTML = "";
+            obstacleTypes.forEach(type => {
+                document.getElementById(type + "Count").textContent = "0";
+            });
+            document.getElementById('result').innerHTML = "";
+            document.getElementById('plusGoalButton').disabled = false;
+            const startButton = document.getElementById('addStartButton');
+            startButton.disabled = false;
+            startButton.style.backgroundColor = '#2196F3';
+            startButton.style.color = 'white';
+            startButton.textContent = 'スタート点獲得';
+            document.getElementById('addRescueButton').disabled = false;
+            document.getElementById('downloadScore').disabled = true;
+            document.getElementById('downloadPDF').disabled = true;
+            updateRescueDisplay();
+        }
+    </script>
+
+</body>
+
+</html>
